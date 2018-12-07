@@ -1,6 +1,7 @@
 package program
 
 import (
+	"DNA/common"
 	"DNA/common/serialization"
 	. "DNA/errors"
 	"io"
@@ -26,6 +27,34 @@ func (p *Program) Serialize(w io.Writer) error {
 		return NewDetailErr(err, ErrNoCode, "Execute Program Serialize Parameter failed.")
 	}
 
+	return nil
+}
+
+func (p *Program) Serialization(sink *common.ZeroCopySink) error {
+	sink.WriteVarBytes(p.Parameter)
+	sink.WriteVarBytes(p.Code)
+	return nil
+}
+
+func (p *Program) Deserialization(source *common.ZeroCopySource) error {
+	var irregular, eof bool
+	var data []byte
+	data, _, irregular, eof = source.NextVarBytes()
+	if irregular {
+		return common.ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	p.Parameter = data
+	data, _, irregular, eof = source.NextVarBytes()
+	if irregular {
+		return common.ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	p.Code = data
 	return nil
 }
 

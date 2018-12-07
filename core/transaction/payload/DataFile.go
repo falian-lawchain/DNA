@@ -1,6 +1,7 @@
 package payload
 
 import (
+	. "DNA/common"
 	"DNA/common/serialization"
 	"DNA/crypto"
 	. "DNA/errors"
@@ -42,6 +43,17 @@ func (a *DataFile) Serialize(w io.Writer, version byte) error {
 	return nil
 }
 
+func (a *DataFile) Serialization(sink *ZeroCopySink, version byte) error {
+	sink.WriteString(a.IPFSPath)
+	sink.WriteString(a.Filename)
+	sink.WriteString(a.Note)
+	err := a.Issuer.Serialization(sink)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Deserialize is the implement of SignableData interface.
 func (a *DataFile) Deserialize(r io.Reader, version byte) error {
 	var err error
@@ -64,5 +76,36 @@ func (a *DataFile) Deserialize(r io.Reader, version byte) error {
 		return NewDetailErr(err, ErrNoCode, "[DataFileDetail], Issuer deserialize failed.")
 	}
 
+	return nil
+}
+
+func (a *DataFile) Deserialization(source *ZeroCopySource, version byte) error {
+	var irregular, eof bool
+	a.IPFSPath, _, irregular, eof = source.NextString()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	a.Filename, _, irregular, eof = source.NextString()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	a.Note, _, irregular, eof = source.NextString()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	a.Issuer = new(crypto.PubKey)
+	err := a.Issuer.DeSerialization(source)
+	if err != nil {
+		return err
+	}
 	return nil
 }

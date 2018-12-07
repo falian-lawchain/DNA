@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"DNA/common"
 	"DNA/common/serialization"
 	"DNA/crypto/p256r1"
 	"DNA/crypto/sm2"
@@ -103,7 +104,7 @@ func Verify(publicKey PubKey, data []byte, signature []byte) error {
 	return p256r1.Verify(&algSet, publicKey.X, publicKey.Y, data, r, s)
 }
 
-func (e *PubKey) Serialize(w io.Writer) error {
+func (e *PubKey) generateXYBytes() ([]byte, []byte) {
 	bufX := []byte{}
 	if e.X.Sign() == -1 {
 		// prefix 0x00 means the big number X is negative
@@ -111,19 +112,30 @@ func (e *PubKey) Serialize(w io.Writer) error {
 	}
 	bufX = append(bufX, e.X.Bytes()...)
 
-	if err := serialization.WriteVarBytes(w, bufX); err != nil {
-		return err
-	}
-
 	bufY := []byte{}
 	if e.Y.Sign() == -1 {
 		// prefix 0x00 means the big number Y is negative
 		bufY = append(bufY, 0x00)
 	}
 	bufY = append(bufY, e.Y.Bytes()...)
+	return bufX, bufY
+}
+func (e *PubKey) Serialize(w io.Writer) error {
+
+	bufX, bufY := e.generateXYBytes()
+	if err := serialization.WriteVarBytes(w, bufX); err != nil {
+		return err
+	}
 	if err := serialization.WriteVarBytes(w, bufY); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (e *PubKey) Serialization(sink *common.ZeroCopySink) error {
+	bufX, bufY := e.generateXYBytes()
+	sink.WriteVarBytes(bufX)
+	sink.WriteVarBytes(bufY)
 	return nil
 }
 
@@ -132,23 +144,44 @@ func (e *PubKey) DeSerialize(r io.Reader) error {
 	if err != nil {
 		return err
 	}
+	bufY, err := serialization.ReadVarBytes(r)
+	if err != nil {
+		return err
+	}
+    e.buildPubKeyByXY(bufX, bufY)
+	return nil
+}
+
+func (e *PubKey) buildPubKeyByXY(bufX, bufY []byte) {
 	e.X = big.NewInt(0)
 	e.X = e.X.SetBytes(bufX)
 	if len(bufX) == util.NEGBIGNUMLEN {
 		e.X.Neg(e.X)
-	}
-	bufY, err := serialization.ReadVarBytes(r)
-	if err != nil {
-		return err
 	}
 	e.Y = big.NewInt(0)
 	e.Y = e.Y.SetBytes(bufY)
 	if len(bufY) == util.NEGBIGNUMLEN {
 		e.Y.Neg(e.Y)
 	}
+}
+func (e *PubKey) DeSerialization(source *common.ZeroCopySource) error {
+	bufX, _, irregular,eof :=source.NextVarBytes()
+	if irregular {
+		return common.ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	bufY, _, irregular,eof :=source.NextVarBytes()
+	if irregular {
+		return common.ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+    e.buildPubKeyByXY(bufX, bufY)
 	return nil
 }
-
 type PubKeySlice []*PubKey
 
 func (p PubKeySlice) Len() int { return len(p) }

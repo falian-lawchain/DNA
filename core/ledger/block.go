@@ -37,6 +37,54 @@ func (b *Block) Serialize(w io.Writer) error {
 	return nil
 }
 
+func (b *Block) Serialization(sink *ZeroCopySink) error {
+	err := b.Blockdata.Serialization(sink)
+	if err != nil {
+		return err
+	}
+	sink.WriteUint32(uint32(len(b.Transactions)))
+	for _, transaction := range b.Transactions {
+		err = transaction.Serialization(sink)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Block) Deserialization(source *ZeroCopySource) error {
+	if b.Blockdata == nil {
+		b.Blockdata = new(Blockdata)
+	}
+	err := b.Blockdata.Deserialization(source)
+	if err != nil {
+		return NewDetailErr(err, ErrNoCode, "Blockdata Deserialize failed")
+	}
+	var eof bool
+	Len, eof := source.NextUint32()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	var txhash Uint256
+	var tharray []Uint256
+	var i uint32
+	for i = 0; i < Len; i++ {
+		transaction := new(tx.Transaction)
+		err := transaction.Deserialization(source)
+		if err != nil {
+			return NewDetailErr(err, ErrNoCode, "Transaction Deserialize failed")
+		}
+		txhash = transaction.Hash()
+		b.Transactions = append(b.Transactions, transaction)
+		tharray = append(tharray, txhash)
+	}
+	b.Blockdata.TransactionsRoot, err = crypto.ComputeRoot(tharray)
+	if err != nil {
+		return NewDetailErr(err, ErrNoCode, "Block Deserialize merkleTree compute failed")
+	}
+	return nil
+}
+
 func (b *Block) Deserialize(r io.Reader) error {
 	if b.Blockdata == nil {
 		b.Blockdata = new(Blockdata)
@@ -169,13 +217,13 @@ func GenesisBlockInit(defaultBookKeeper []*crypto.PubKey) (*Block, error) {
 	//transaction
 	trans := &tx.Transaction{
 		TxType:         tx.BookKeeping,
-		PayloadVersion:  byte(0),
-		Payload:       nil,
-		Attributes:    []*tx.TxAttribute{},
-		UTXOInputs:    []*tx.UTXOTxInput{},
-		BalanceInputs: []*tx.BalanceTxInput{},
-		Outputs:       []*tx.TxOutput{},
-		Programs:      []*program.Program{},
+		PayloadVersion: byte(0),
+		Payload:        nil,
+		Attributes:     []*tx.TxAttribute{},
+		UTXOInputs:     []*tx.UTXOTxInput{},
+		BalanceInputs:  []*tx.BalanceTxInput{},
+		Outputs:        []*tx.TxOutput{},
+		Programs:       []*program.Program{},
 	}
 	//block
 	genesisBlock := &Block{

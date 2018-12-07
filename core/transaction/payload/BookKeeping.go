@@ -1,6 +1,7 @@
 package payload
 
 import (
+	. "DNA/common"
 	"DNA/common/serialization"
 	"io"
 )
@@ -27,6 +28,14 @@ func (a *BookKeeping) Serialize(w io.Writer, version byte) error {
 	return nil
 }
 
+func (a *BookKeeping) Serialization(sink *ZeroCopySink, version byte) error {
+	if version == BookKeepingPayloadVersionBase {
+		return nil
+	}
+	sink.WriteUint64(uint64(a.Nonce))
+	return nil
+}
+
 func (a *BookKeeping) Deserialize(r io.Reader, version byte) error {
 	if version == BookKeepingPayloadVersionBase {
 		return nil
@@ -36,5 +45,17 @@ func (a *BookKeeping) Deserialize(r io.Reader, version byte) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (a *BookKeeping) Deserialization(source *ZeroCopySource, version byte) error {
+	if version == BookKeepingPayloadVersionBase {
+		return nil
+	}
+	data, eof := source.NextUint64()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	a.Nonce = data
 	return nil
 }

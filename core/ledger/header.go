@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"DNA/common"
 	"io"
 )
 
@@ -15,15 +16,40 @@ func (h *Header) Serialize(w io.Writer) {
 
 }
 
-func (h *Header) Deserialize(r io.Reader) error {
-	header := new(Blockdata)
-	header.Deserialize(r)
-	h.Blockdata = header
-	var headerFlag [1]byte
-	_, err := io.ReadFull(r, headerFlag[:])
+func (h *Header) Serialization(sink *common.ZeroCopySink) error {
+	err := h.Blockdata.Serialization(sink)
 	if err != nil {
 		return err
 	}
+	sink.WriteByte(byte('0'))
+	return nil
+}
 
+func (h *Header) Deserialization(source *common.ZeroCopySource) error {
+	blockData := new(Blockdata)
+	err := blockData.Deserialization(source)
+	if err != nil {
+		return err
+	}
+	h.Blockdata = blockData
+	_, eof := source.NextByte()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+
+func (h *Header) Deserialize(r io.Reader) error {
+	header := new(Blockdata)
+	err := header.Deserialize(r)
+	if err != nil {
+		return err
+	}
+	h.Blockdata = header
+	var headerFlag [1]byte
+	_, err = io.ReadFull(r, headerFlag[:])
+	if err != nil {
+		return err
+	}
 	return nil
 }

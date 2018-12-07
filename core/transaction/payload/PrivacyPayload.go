@@ -1,6 +1,7 @@
 package payload
 
 import (
+	. "DNA/common"
 	"DNA/common/serialization"
 	"DNA/crypto"
 	"crypto/ecdsa"
@@ -23,6 +24,8 @@ type PayloadEncryptType byte
 type PayloadEncryptAttr interface {
 	Serialize(w io.Writer) error
 	Deserialize(r io.Reader) error
+	Serialization(sink *ZeroCopySink) error
+	Deserialization(source *ZeroCopySource) error
 	Encrypt(msg []byte, keys interface{}) ([]byte, error)
 	Decrypt(msg []byte, keys interface{}) ([]byte, error)
 }
@@ -55,6 +58,52 @@ func (pp *PrivacyPayload) Serialize(w io.Writer, version byte) error {
 	w.Write([]byte{byte(pp.EncryptType)})
 	err = pp.EncryptAttr.Serialize(w)
 
+	return err
+}
+
+func (pp *PrivacyPayload) Serialization(sink *ZeroCopySink, version byte) error {
+	sink.WriteByte(byte(pp.PayloadType))
+	sink.WriteVarBytes(pp.Payload)
+	sink.WriteByte(byte(pp.EncryptType))
+	err := pp.EncryptAttr.Serialization(sink)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pp *PrivacyPayload) Deserialization(source *ZeroCopySource, version byte) error {
+	//TODO
+	//payloadType,_,irregular,eof := source.NextVarBytes()
+	//if irregular {
+	//	return common.ErrIrregularData
+	//}
+	payloadType, eof := source.NextByte()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+
+	pp.PayloadType = EncryptedPayloadType(payloadType)
+	p, _, irregular, eof := source.NextVarBytes()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.EOF
+	}
+	pp.Payload = EncryptedPayload(p)
+	t, eof := source.NextByte()
+	if eof {
+		return io.EOF
+	}
+	pp.EncryptType = PayloadEncryptType(t)
+	switch pp.EncryptType {
+	case ECDH_AES256:
+		pp.EncryptAttr = new(EcdhAes256)
+	default:
+		return errors.New("unknown EncryptType")
+	}
+	err := pp.EncryptAttr.Deserialization(source)
 	return err
 }
 
@@ -108,6 +157,18 @@ func (ea *EcdhAes256) Serialize(w io.Writer) error {
 	err = serialization.WriteVarBytes(w, ea.Nonce)
 	return err
 }
+func (ea *EcdhAes256) Serialization(sink *ZeroCopySink) error {
+	err := ea.FromPubkey.Serialization(sink)
+	if err != nil {
+		return err
+	}
+	err = ea.ToPubkey.Serialization(sink)
+	if err != nil {
+		return err
+	}
+	sink.WriteVarBytes(ea.Nonce)
+	return nil
+}
 func (ea *EcdhAes256) Deserialize(r io.Reader) error {
 	ea.FromPubkey = new(crypto.PubKey)
 	err := ea.FromPubkey.DeSerialize(r)
@@ -126,6 +187,28 @@ func (ea *EcdhAes256) Deserialize(r io.Reader) error {
 		return err
 	}
 	ea.Nonce = nonce
+	return nil
+}
+
+func (ea *EcdhAes256) Deserialization(source *ZeroCopySource) error {
+	ea.FromPubkey = new(crypto.PubKey)
+	err := ea.FromPubkey.DeSerialization(source)
+	if err != nil {
+		return err
+	}
+	ea.ToPubkey = new(crypto.PubKey)
+	err = ea.ToPubkey.DeSerialization(source)
+	if err != nil {
+		return err
+	}
+	data, _, irregular, eof := source.NextVarBytes()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	ea.Nonce = data
 	return nil
 }
 

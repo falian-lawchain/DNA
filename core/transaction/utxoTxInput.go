@@ -21,6 +21,12 @@ func (ui *UTXOTxInput) Serialize(w io.Writer) {
 	serialization.WriteUint16(w, ui.ReferTxOutputIndex)
 }
 
+func (ui *UTXOTxInput) Serialization(sink *common.ZeroCopySink) error {
+	sink.WriteBytes(ui.ReferTxID.ToArray())
+	sink.WriteUint16(ui.ReferTxOutputIndex)
+	return nil
+}
+
 func (ui *UTXOTxInput) Deserialize(r io.Reader) error {
 	//referTxID
 	err := ui.ReferTxID.Deserialize(r)
@@ -35,6 +41,22 @@ func (ui *UTXOTxInput) Deserialize(r io.Reader) error {
 		return err
 	}
 
+	return nil
+}
+
+func (ui *UTXOTxInput) Deserialization(source *common.ZeroCopySource) error {
+	val, eof := source.NextBytes(common.UINT256SIZE)
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	copy(ui.ReferTxID[:], val)
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	ui.ReferTxOutputIndex, eof = source.NextUint16()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
 	return nil
 }
 

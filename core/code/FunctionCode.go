@@ -1,10 +1,10 @@
 package code
 
 import (
-	"DNA/common/log"
 	. "DNA/common"
-	. "DNA/core/contract"
+	"DNA/common/log"
 	"DNA/common/serialization"
+	. "DNA/core/contract"
 	"fmt"
 	"io"
 )
@@ -22,12 +22,12 @@ type FunctionCode struct {
 
 // method of SerializableData
 func (fc *FunctionCode) Serialize(w io.Writer) error {
-	err := serialization.WriteVarBytes(w,ContractParameterTypeToByte(fc.ParameterTypes))
+	err := serialization.WriteVarBytes(w, ContractParameterTypeToByte(fc.ParameterTypes))
 	if err != nil {
 		return err
 	}
 
-	err = serialization.WriteVarBytes(w,fc.Code)
+	err = serialization.WriteVarBytes(w, fc.Code)
 	if err != nil {
 		return err
 	}
@@ -35,15 +35,40 @@ func (fc *FunctionCode) Serialize(w io.Writer) error {
 	return nil
 }
 
+func (fc *FunctionCode) Serialization(sink *ZeroCopySink) error {
+	sink.WriteVarBytes(ContractParameterTypeToByte(fc.ParameterTypes))
+	sink.WriteVarBytes(fc.Code)
+	return nil
+}
+
+func (fc *FunctionCode) Deserialization(source *ZeroCopySource) error {
+	var eof, irregular bool
+	var data []byte
+	data, _, irregular, eof = source.NextVarBytes()
+	if irregular {
+		return ErrIrregularData
+	}
+	fc.ParameterTypes = ByteToContractParameterType(data)
+	data, _, irregular, eof = source.NextVarBytes()
+	if irregular {
+		return ErrIrregularData
+	}
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	fc.Code = data
+	return nil
+}
+
 // method of SerializableData
 func (fc *FunctionCode) Deserialize(r io.Reader) error {
-	p,err := serialization.ReadVarBytes(r)
+	p, err := serialization.ReadVarBytes(r)
 	if err != nil {
 		return err
 	}
 	fc.ParameterTypes = ByteToContractParameterType(p)
 
-	fc.Code,err = serialization.ReadVarBytes(r)
+	fc.Code, err = serialization.ReadVarBytes(r)
 	if err != nil {
 		return err
 	}
@@ -72,9 +97,9 @@ func (fc *FunctionCode) GetReturnTypes() []ContractParameterType {
 // method of ICode
 // Get the hash of the smart contract
 func (fc *FunctionCode) CodeHash() Uint160 {
-	hash,err := ToCodeHash(fc.Code)
+	hash, err := ToCodeHash(fc.Code)
 	if err != nil {
-		log.Debug( fmt.Sprintf("[FunctionCode] ToCodeHash err=%s",err) )
+		log.Debug(fmt.Sprintf("[FunctionCode] ToCodeHash err=%s", err))
 		return Uint160{0}
 	}
 

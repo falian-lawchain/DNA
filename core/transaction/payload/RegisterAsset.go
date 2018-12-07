@@ -32,6 +32,32 @@ func (a *RegisterAsset) Serialize(w io.Writer, version byte) error {
 	a.Controller.Serialize(w)
 	return nil
 }
+func (a *RegisterAsset) Serialization(sink *common.ZeroCopySink, version byte) error {
+	a.Asset.Serialization(sink)
+	sink.WriteFixed64(a.Amount)
+	a.Issuer.Serialization(sink)
+	sink.WriteUint160(a.Controller)
+	return nil
+}
+func (a *RegisterAsset) Deserialization(source *common.ZeroCopySource, version byte) error {
+	a.Asset = new(asset.Asset)
+	err := a.Asset.Deserialization(source)
+	if err != nil {
+		return err
+	}
+	var eof bool
+	a.Amount, eof = source.NextFixed64()
+	a.Issuer = new(crypto.PubKey)
+	err = a.Issuer.DeSerialization(source)
+	if err != nil {
+		return err
+	}
+	a.Controller, eof = source.NextUint160()
+	if eof {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 
 func (a *RegisterAsset) Deserialize(r io.Reader, version byte) error {
 
